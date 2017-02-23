@@ -220,13 +220,16 @@ static const CGFloat MBDefaultDetailsLabelFontSize = 12.f;
     [self setNSProgressDisplayLinkEnabled:YES];
 
     if (animated) {
-        [self animateIn:YES withType:self.animationType completion:NULL];
+        [self animateIn:YES withType:self.animationType completion:^(BOOL finished) {
+            [self begin];
+        }];
     } else {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         self.bezelView.alpha = self.opacity;
 #pragma clang diagnostic pop
         self.backgroundView.alpha = 1.f;
+        [self begin];
     }
 }
 
@@ -285,6 +288,13 @@ static const CGFloat MBDefaultDetailsLabelFontSize = 12.f;
     }
 #endif
     [UIView animateWithDuration:0.3 delay:0. options:UIViewAnimationOptionBeginFromCurrentState animations:animations completion:completion];
+}
+
+- (void)begin {
+    id<MBProgressHUDDelegate> delegate = self.delegate;
+    if ([delegate respondsToSelector:@selector(hudWasShown:)]) {
+        [delegate performSelector:@selector(hudWasShown:) withObject:self];
+    }
 }
 
 - (void)done {

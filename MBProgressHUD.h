@@ -309,6 +309,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @optional
 
+/**
+ * Called after the HUD was fully shown on the screen.
+ */
+- (void)hudWasShown:(MBProgressHUD *)hud;
+
 /** 
  * Called after the HUD was fully hidden from the screen. 
  */
