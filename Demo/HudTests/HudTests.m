@@ -26,10 +26,15 @@ XCTAssertFalse(hud.hidden, @"The HUD should be visible."); \
 XCTAssertEqual(hud.bezelView.alpha, 1.f, @"The HUD should be visible."); \
 } while (0)
 
+#define MBTestHUDIsHiden(hud, rootView) \
+do { \
+XCTAssertEqual(hud.alpha, 0.f, @"The hud should be faded out."); \
+} while (0)
+
 #define MBTestHUDIsHidenAndRemoved(hud, rootView) \
 do { \
 XCTAssertFalse([rootView.subviews containsObject:hud], @"The HUD should not be part of the view hierarchy."); \
-XCTAssertEqual(hud.alpha, 0.f, @"The hud should be faded out."); \
+MBTestHUDIsHiden(hud, rootView); \
 XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
 } while (0)
 
@@ -42,6 +47,17 @@ XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
 
 
 @implementation HudTests
+
+#pragma mark - Initialization
+
+- (void)testInitializers {
+    XCTAssertNotNil([[MBProgressHUD alloc] initWithView:[UIView new]]);
+    UIView *nilView = nil;
+    XCTAssertThrows([[MBProgressHUD alloc] initWithView:nilView]);
+    XCTAssertNotNil([[MBProgressHUD alloc] initWithFrame:CGRectZero]);
+    NSKeyedUnarchiver *dummyUnarchiver = [[NSKeyedUnarchiver alloc] initForReadingWithData:[NSData data]];
+    XCTAssertNotNil([[MBProgressHUD alloc] initWithCoder:dummyUnarchiver]);
+}
 
 #pragma mark - Convenience
 
@@ -120,6 +136,76 @@ XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
     [self waitForExpectationsWithTimeout:5. handler:nil];
 }
 
+#pragma mark - Modes
+
+- (void)testRoundDeterminate {
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+    hud.mode = MBProgressHUDModeDeterminate;
+    [rootView addSubview:hud];
+    [hud showAnimated:NO];
+
+    MBTestHUDIsVisible(hud, rootView);
+    XCTAssertNotNil([self view:hud firstSubviewOfClass:[MBRoundProgressView class]]);
+
+    XCTAssertTrue([MBProgressHUD hideHUDForView:rootView animated:NO], @"The HUD should be found and removed.");
+    MBTestHUDIsHidenAndRemoved(hud, rootView);
+}
+
+- (void)testRoundAnnularDeterminate {
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+    hud.mode = MBProgressHUDModeAnnularDeterminate;
+    [rootView addSubview:hud];
+    [hud showAnimated:NO];
+
+    MBTestHUDIsVisible(hud, rootView);
+    XCTAssertNotNil([self view:hud firstSubviewOfClass:[MBRoundProgressView class]]);
+
+    XCTAssertTrue([MBProgressHUD hideHUDForView:rootView animated:NO], @"The HUD should be found and removed.");
+    MBTestHUDIsHidenAndRemoved(hud, rootView);
+}
+
+- (void)testDeterminateHorizontalBar {
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+    hud.mode = MBProgressHUDModeDeterminateHorizontalBar;
+    [rootView addSubview:hud];
+    [hud showAnimated:NO];
+
+    MBTestHUDIsVisible(hud, rootView);
+    XCTAssertNotNil([self view:hud firstSubviewOfClass:[MBBarProgressView class]]);
+
+    XCTAssertTrue([MBProgressHUD hideHUDForView:rootView animated:NO], @"The HUD should be found and removed.");
+    MBTestHUDIsHidenAndRemoved(hud, rootView);
+
+}
+
+#pragma mark - Customization
+
+- (void)testEffectViewOrderAfterSettingBlurStyle {
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+
+    [hud.bezelView.subviews enumerateObjectsUsingBlock:^(UIView *view, NSUInteger idx, BOOL *stop) {
+        XCTAssert(![view isKindOfClass:UIVisualEffectView.class] || idx == 0, @"Just the first subview should be a visual effect view.");
+    }];
+
+    hud.bezelView.blurEffectStyle = UIBlurEffectStyleDark;
+
+    [hud.bezelView.subviews enumerateObjectsUsingBlock:^(UIView *view, NSUInteger idx, BOOL *stop) {
+        XCTAssert(![view isKindOfClass:UIVisualEffectView.class] || idx == 0, @"Just the first subview should be a visual effect view even after changing the blurEffectStyle.");
+    }];
+}
+
 #pragma mark - Delay
 
 - (void)testDelayedHide {
@@ -150,6 +236,34 @@ XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
 
     [self waitForExpectationsWithTimeout:5. handler:nil];
 
+    MBTestHUDIsHidenAndRemoved(hud, rootView);
+}
+
+- (void)testDelayedHideDoesNotRace {
+    // https://github.com/jdg/MBProgressHUD/issues/503
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+    [rootView addSubview:hud];
+
+    [hud showAnimated:YES];
+    [hud hideAnimated:YES afterDelay:0.3];
+    MBTestHUDIsVisible(hud, rootView);
+
+    XCTestExpectation *hideCheckExpectation = [self expectationWithDescription:@"Hide check"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [hud showAnimated:YES];
+        [hud hideAnimated:YES afterDelay:0.3];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            MBTestHUDIsHiden(hud, rootView);
+            [hideCheckExpectation fulfill];
+        });
+    });
+
+    [self waitForExpectationsWithTimeout:5. handler:nil];
+
+    [hud removeFromSuperview];
     MBTestHUDIsHidenAndRemoved(hud, rootView);
 }
 
@@ -348,6 +462,31 @@ XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
     MBTestHUDIsHidenAndRemoved(hud, rootView);
 }
 
+#pragma mark - Customization
+
+- (void)testShape {
+    UIViewController *rootViewController = UIApplication.sharedApplication.keyWindow.rootViewController;
+    UIView *rootView = rootViewController.view;
+
+    MBProgressHUD *hud = [[MBProgressHUD alloc] initWithView:rootView];
+    hud.removeFromSuperViewOnHide = YES;
+    hud.offset = CGPointMake(50, 50);
+    hud.square = YES;
+    hud.label.text = @"Some long text...";
+    [rootView addSubview:hud];
+    [hud showAnimated:NO];
+
+    [hud setNeedsLayout];
+    [hud layoutIfNeeded];
+
+    CGRect frame = hud.bezelView.frame;
+    XCTAssertEqual(frame.size.width, frame.size.height);
+
+    [hud hideAnimated:NO];
+
+    MBTestHUDIsHidenAndRemoved(hud, rootView);
+}
+
 #pragma mark - MBProgressHUDDelegate
 
 - (void)hudWasHidden:(MBProgressHUD *)hud {
@@ -356,6 +495,22 @@ XCTAssertNil(hud.superview, @"The HUD should not have a superview."); \
 
     [self.hideExpectation fulfill];
     self.hideExpectation = nil;
+}
+
+#pragma mark - Helpers
+
+- (nullable UIView *)view:(UIView *)view firstSubviewOfClass:(Class)clazz {
+    for (__unsafe_unretained UIView *subview in view.subviews) {
+        if ([subview isKindOfClass:clazz]) {
+            return subview;
+        }
+    }
+    __unsafe_unretained UIView *theView;
+    for (__unsafe_unretained UIView *subview in view.subviews) {
+        theView = [self view:subview firstSubviewOfClass:clazz];
+        if (theView) { break; }
+    }
+    return theView;
 }
 
 @end
