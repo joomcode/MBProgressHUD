@@ -211,6 +211,7 @@ static const CGFloat MBDefaultDetailsLabelFontSize = 12.f;
             [self begin];
         }];
     } else {
+        self.bezelView.transform = CGAffineTransformIdentity;
         self.bezelView.alpha = 1.f;
         self.backgroundView.alpha = 1.f;
         [self begin];
@@ -232,7 +233,7 @@ static const CGFloat MBDefaultDetailsLabelFontSize = 12.f;
     } else {
         self.showStarted = nil;
         self.bezelView.alpha = 0.f;
-        self.backgroundView.alpha = 1.f;
+        self.backgroundView.alpha = 0.f;
         [self done];
     }
 }
